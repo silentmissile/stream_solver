@@ -2,6 +2,7 @@
 #define STREAM_SOLVER_H
 
 #include <Eigen/Core>
+#include <Eigen/Array>
 #include <Eigen/Geometry>
 #include <cmath>
 #include "spline.h"
@@ -16,7 +17,7 @@ public:
     //stream_solver();
     stream_solver(const MatrixXd &r, const MatrixXd &z, const MatrixXd &t,
                   const int &bn, const int &sn, const int &stn,
-                  const double &in_p, const double &in_t, const double &in_spd, const double &out_p,
+                  const double &in_p, const double &in_t, const double &out_p,  const MatrixXd &cir,
                   const double &rs, const MatrixXd &eff,
                   const double &R, const double &gamma);
     void stream_direction();
@@ -26,9 +27,12 @@ private:
     //each row is for one stream line, from leading edge to trailing edge
     //thickness is angular thickness not dimensional thickness
     MatrixXd radius, z_axial, thickness, beta, theta;
-    MatrixXd meridian_stream_direction_z, meridian_stream_direction_r, meridian_stream_curvature, meridian_stream_lenth;
+    MatrixXd meridian_stream_direction_z, meridian_stream_direction_r;
+    MatrixXd meridian_stream_curvature, meridian_stream_lenth;
+    MatrixXd meridian_area;
     //boundary conditions
-    double inlet_pressure, inlet_temperature, inlet_speed, outlet_pressure, mass_flow_rate;
+    double inlet_pressure, inlet_temperature, outlet_pressure, mass_flow_rate;
+    MatrixXd circulation;
     double rotate_speed;
     MatrixXd wheel_efficiency;
     //material property

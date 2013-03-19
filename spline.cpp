@@ -207,23 +207,21 @@ bool spline::spline_parametric(const VectorXd &x, const VectorXd &y,
     dif_1.col(1)=tmpd1;
     dif_2.col(0)=tmpd2;
     dif_2.col(1)=tmpd3;
-    MatrixXd coef(n-1,8);
+    MatrixXd coef(n-1,6);
 //    VectorXd s0(n);
 //    s0(0)=0;
 //    for(int k=1;k<n;++k)
 //    {
 //        s0(k)=s0(k-1)+s(k-1);
 //    }
-    coef.col(0)=x.head(n-1).cwiseQuotient(s);
-    coef.col(1)=(1/3*dif_2.col(0).head(n-1)-1/6*dif_2.col(0).tail(n-1)).cwiseProduct(s)
-            +(x.tail(n-1)-x.head(n-1)).cwiseQuotient(s);
-    coef.col(2)=0.5*dif_2.col(0).cwiseProduct(s);
-    coef.col(3)=1/6*(dif_2.col(0).tail(n-1)-dif_2.col(0).head(n-1));
-    coef.col(4)=y.head(n-1).cwiseQuotient(s);
-    coef.col(5)=(1/3*dif_2.col(0).head(n-1)-1/6*dif_2.col(0).tail(n-1)).cwiseProduct(s)
-            +(y.tail(n-1)-y.head(n-1)).cwiseQuotient(s);
-    coef.col(6)=coef.col(2);
-    coef.col(7)=coef.col(3);
+    coef.col(0)=(x.tail(n-1)-x.head(n-1)).cwiseQuotient(s)
+            -(2*dif_2.col(0).head(n-1)+dif_2.col(0).tail(n-1)).cwiseProduct(s)/6;
+    coef.col(1)=dif_2.col(0).head(n-1)/2;
+    coef.col(2)=(dif_2.col(0).tail(n-1)-dif_2.col(0).head(n-1)).cwiseQuotient(s)/6;
+    coef.col(3)=(y.tail(n-1)-y.head(n-1)).cwiseQuotient(s)
+            -(2*dif_2.col(1).head(n-1)+dif_2.col(1).tail(n-1)).cwiseProduct(s)/6;
+    coef.col(4)=dif_2.col(1).head(n-1)/2;
+    coef.col(5)=(dif_2.col(1).tail(n-1)-dif_2.col(1).head(n-1)).cwiseQuotient(s)/6;
     len.resizeLike(s);
 //    tmpd0.resize(INTEGRATION_CONSTANT+1);
 //    tmpd1.resize(INTEGRATION_CONSTANT+1);
@@ -231,12 +229,12 @@ bool spline::spline_parametric(const VectorXd &x, const VectorXd &y,
     for(int n1=0;n1<n-1;++n1)
     {
         tmpd0.setLinSpaced(INTEGRATION_CONSTANT+1,0,s(n1));
-        tmpd1=coef(n1,3)*tmpd0.cwiseProduct(tmpd0).cwiseProduct(tmpd0)
-                +coef(n1,2)*tmpd0.cwiseProduct(tmpd0)
-                +coef(n1,1)*tmpd0;
-        tmpd2=coef(n1,7)*tmpd0.cwiseProduct(tmpd0).cwiseProduct(tmpd0)
-                +coef(n1,6)*tmpd0.cwiseProduct(tmpd0)
-                +coef(n1,5)*tmpd0;
+        tmpd1=coef(n1,2)*tmpd0.cwiseProduct(tmpd0).cwiseProduct(tmpd0)
+                +coef(n1,1)*tmpd0.cwiseProduct(tmpd0)
+                +coef(n1,0)*tmpd0;
+        tmpd2=coef(n1,5)*tmpd0.cwiseProduct(tmpd0).cwiseProduct(tmpd0)
+                +coef(n1,4)*tmpd0.cwiseProduct(tmpd0)
+                +coef(n1,3)*tmpd0;
         len(n1)=(tmpd1.cwiseProduct(tmpd1)+tmpd2.cwiseProduct(tmpd2)).cwiseSqrt().sum();
     }
     return(true);
@@ -394,28 +392,25 @@ bool spline::spline_parametric(const VectorXd &x, const VectorXd &y, const Vecto
     dif_2.col(0)=tmpd3;
     dif_2.col(1)=tmpd4;
     dif_2.col(2)=tmpd5;
-    MatrixXd coef(n-1,12);
+    MatrixXd coef(n-1,9);
 //    VectorXd s0(n);
 //    s0(0)=0;
 //    for(int k=1;k<n;++k)
 //    {
 //        s0(k)=s0(k-1)+s(k-1);
 //    }
-    coef.col(0)=x.head(n-1).cwiseQuotient(s);
-    coef.col(1)=(1/3*dif_2.col(0).head(n-1)-1/6*dif_2.col(0).tail(n-1)).cwiseProduct(s)
-            +(x.tail(n-1)-x.head(n-1)).cwiseQuotient(s);
-    coef.col(2)=0.5*dif_2.col(0).cwiseProduct(s);
-    coef.col(3)=1/6*(dif_2.col(0).tail(n-1)-dif_2.col(0).head(n-1));
-    coef.col(4)=y.head(n-1).cwiseQuotient(s);
-    coef.col(5)=(1/3*dif_2.col(0).head(n-1)-1/6*dif_2.col(0).tail(n-1)).cwiseProduct(s)
-            +(y.tail(n-1)-y.head(n-1)).cwiseQuotient(s);
-    coef.col(6)=coef.col(2);
-    coef.col(7)=coef.col(3);
-    coef.col(8)=z.head(n-1).cwiseQuotient(s);
-    coef.col(9)=(1/3*dif_2.col(0).head(n-1)-1/6*dif_2.col(0).tail(n-1)).cwiseProduct(s)
-            +(z.tail(n-1)-z.head(n-1)).cwiseQuotient(s);
-    coef.col(10)=coef.col(2);
-    coef.col(11)=coef.col(3);
+    coef.col(0)=(x.tail(n-1)-x.head(n-1)).cwiseQuotient(s)
+            -(2*dif_2.col(0).head(n-1)+dif_2.col(0).tail(n-1)).cwiseProduct(s)/6;
+    coef.col(1)=dif_2.col(0).head(n-1)/2;
+    coef.col(2)=(dif_2.col(0).tail(n-1)-dif_2.col(0).head(n-1)).cwiseQuotient(s)/6;
+    coef.col(3)=(y.tail(n-1)-y.head(n-1)).cwiseQuotient(s)
+            -(2*dif_2.col(1).head(n-1)+dif_2.col(1).tail(n-1)).cwiseProduct(s)/6;
+    coef.col(4)=dif_2.col(1).head(n-1)/2;
+    coef.col(5)=(dif_2.col(1).tail(n-1)-dif_2.col(1).head(n-1)).cwiseQuotient(s)/6;
+    coef.col(6)=(z.tail(n-1)-z.head(n-1)).cwiseQuotient(s)
+            -(2*dif_2.col(2).head(n-1)+dif_2.col(2).tail(n-1)).cwiseProduct(s)/6;
+    coef.col(7)=dif_2.col(2).head(n-1)/2;
+    coef.col(8)=(dif_2.col(2).tail(n-1)-dif_2.col(2).head(n-1)).cwiseQuotient(s)/6;
     len.resizeLike(s);
 //    tmpd0.resize(INTEGRATION_CONSTANT+1);
 //    tmpd1.resize(INTEGRATION_CONSTANT+1);
@@ -424,15 +419,15 @@ bool spline::spline_parametric(const VectorXd &x, const VectorXd &y, const Vecto
     for(int n1=0;n1<n-1;++n1)
     {
         tmpd0.setLinSpaced(INTEGRATION_CONSTANT+1,0,s(n1));
-        tmpd1=coef(n1,3)*tmpd0.cwiseProduct(tmpd0).cwiseProduct(tmpd0)
-                +coef(n1,2)*tmpd0.cwiseProduct(tmpd0)
-                +coef(n1,1)*tmpd0;
-        tmpd2=coef(n1,7)*tmpd0.cwiseProduct(tmpd0).cwiseProduct(tmpd0)
-                +coef(n1,6)*tmpd0.cwiseProduct(tmpd0)
-                +coef(n1,5)*tmpd0;
-        tmpd3=coef(n1,11)*tmpd0.cwiseProduct(tmpd0).cwiseProduct(tmpd0)
-                +coef(n1,10)*tmpd0.cwiseProduct(tmpd0)
-                +coef(n1,9)*tmpd0;
+        tmpd1=coef(n1,2)*tmpd0.cwiseProduct(tmpd0).cwiseProduct(tmpd0)
+                +coef(n1,1)*tmpd0.cwiseProduct(tmpd0)
+                +coef(n1,0)*tmpd0;
+        tmpd2=coef(n1,5)*tmpd0.cwiseProduct(tmpd0).cwiseProduct(tmpd0)
+                +coef(n1,4)*tmpd0.cwiseProduct(tmpd0)
+                +coef(n1,3)*tmpd0;
+        tmpd3=coef(n1,8)*tmpd0.cwiseProduct(tmpd0).cwiseProduct(tmpd0)
+                +coef(n1,7)*tmpd0.cwiseProduct(tmpd0)
+                +coef(n1,6)*tmpd0;
         len(n1)=(tmpd1.cwiseProduct(tmpd1)+tmpd2.cwiseProduct(tmpd2)+tmpd3.cwiseProduct(tmpd3)).cwiseSqrt().sum();
     }
     return(true);

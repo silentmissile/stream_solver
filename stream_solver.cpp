@@ -2,7 +2,7 @@
 
 stream_solver::stream_solver(const MatrixXd &r, const MatrixXd &z, const MatrixXd &t,
                              const int &bn, const int &sn, const int &stn,
-                             const double &in_p, const double &in_t, const double &in_spd, const double &out_p,
+                             const double &in_p, const double &in_t, const double &out_p, const MatrixXd &cir,
                              const double &rs, const MatrixXd &eff, const double &R, const double &gamma)
 {
     //check input data
@@ -14,7 +14,9 @@ stream_solver::stream_solver(const MatrixXd &r, const MatrixXd &z, const MatrixX
             ||tmp_i_1!=t.rows()
             ||tmp_i_2!=t.cols()
             ||tmp_i_1!=eff.rows()
-            ||tmp_i_2!=eff.cols())
+            ||tmp_i_2!=eff.cols()
+            ||tmp_i_1!=cir.rows()
+            ||tmp_i_2!=cir.cols())
         return;
     //import input data
     stream_number=tmp_i_1;
@@ -22,13 +24,13 @@ stream_solver::stream_solver(const MatrixXd &r, const MatrixXd &z, const MatrixX
     radius=r;
     z_axial=z;
     thickness=t;
+    circulation=cir;
     blade_number=bn;
     stream_number=sn;
     station_number=stn;
     inlet_pressure=in_p;
     inlet_temperature=in_t;
     outlet_pressure=out_p;
-    mass_flow_rate=in_spd;
     rotate_speed=rs;
     wheel_efficiency=eff;
     gas_constant=R;
@@ -46,19 +48,23 @@ stream_solver::stream_solver(const MatrixXd &r, const MatrixXd &z, const MatrixX
     temperature.col(0).setConstant(inlet_temperature);
     density.col(0).setConstant(inlet_pressure/gas_constant/inlet_temperature);
     entropy.col(0).setConstant(0);
-    VectorXd tmp_vec_1, tmp_vec_2;
-    tmp_vec_1=(thickness.col(0).head(stream_number-1)+thickness.col(0).head(stream_number-1))/2;
-    tmp_vec_2=z_axial.col(0).tail(stream_number-1)+z_axial.col(0).head(stream_number-1);
-    double area=tmp_vec_2.cwiseProduct(MatrixXd::Constant(stream_number-1,1,2*M_PI)-tmp_vec_1*blade_number).sum()*radius(0,0);
-    //in radial turbine theory, optimized inlet angle is between 20deg to 40deg
-    //here I set it at middle: M_PI/6
-    mass_flow_rate=density(0,0)*inlet_speed*cos(M_PI/6)*area;
     //calculate stream directions
     meridian_stream_direction_r.resizeLike(radius);
     meridian_stream_direction_z.resizeLike(radius);
     meridian_stream_curvature.resizeLike(radius);
     meridian_stream_lenth.resize(stream_number,station_number-1);
     stream_direction();
+    //calculate mass flow rate
+    ArrayXd tmp_arr_1, tmp_arr_2, tmp_arr_3;
+    tmp_arr_1=thickness.col(0);
+    tmp_arr_2=radius.col(0);
+    tmp_arr_3=circulation.col(0);
+    ArrayXd area=((ArrayXd::Constant(stream_number-1,1,2*M_PI)-blade_number*tmp_arr_1.tail(stream_number-1))*tmp_arr_2.tail(stream_number-1)
+          +(ArrayXd::Constant(stream_number-1,1,2*M_PI)-blade_number*tmp_arr_1.head(stream_number-1))*tmp_arr_2.head(stream_number-1))
+            *(tmp_arr_3.head(stream_number-1)+tmp_arr_3.tail(stream_number-1))/4;
+    //in radial turbine theory, optimized inlet angle is between 20deg to 40deg
+    //here I set it at middle: M_PI/6
+    mass_flow_rate=density(0,0)*cos(M_PI/6)*area;
 }
 
 void stream_solver::stream_direction()
