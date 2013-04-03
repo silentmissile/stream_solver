@@ -3,7 +3,8 @@
 stream_solver::stream_solver(const MatrixXd &r, const MatrixXd &z, const MatrixXd &t,
                              const int &bn, const int &sn, const int &stn,
                              const double &in_p, const double &in_t, const double &out_p, const MatrixXd &cir,
-                             const double &rs, const MatrixXd &eff, const double &R, const double &gamma)
+                             const double &mf, const double &rs, const MatrixXd &eff,
+                             const double &R, const double &gamma)
 {
     //check input data
     int tmp_i_1, tmp_i_2;
@@ -31,6 +32,7 @@ stream_solver::stream_solver(const MatrixXd &r, const MatrixXd &z, const MatrixX
     inlet_pressure=in_p;
     inlet_temperature=in_t;
     outlet_pressure=out_p;
+    mass_flow_rate=mf;
     rotate_speed=rs;
     wheel_efficiency=eff;
     gas_constant=R;
@@ -53,21 +55,16 @@ stream_solver::stream_solver(const MatrixXd &r, const MatrixXd &z, const MatrixX
     meridian_stream_direction_z.resizeLike(radius);
     meridian_stream_curvature.resizeLike(radius);
     meridian_stream_lenth.resize(stream_number,station_number-1);
-    stream_direction();
+    meridian_area.resize(stream_number-1,station_number);
+    calculate_stream_direction();
+    calculate_area();
     //calculate mass flow rate
-    ArrayXd tmp_arr_1, tmp_arr_2, tmp_arr_3;
-    tmp_arr_1=thickness.col(0);
-    tmp_arr_2=radius.col(0);
-    tmp_arr_3=circulation.col(0);
-    ArrayXd area=((ArrayXd::Constant(stream_number-1,1,2*M_PI)-blade_number*tmp_arr_1.tail(stream_number-1))*tmp_arr_2.tail(stream_number-1)
-          +(ArrayXd::Constant(stream_number-1,1,2*M_PI)-blade_number*tmp_arr_1.head(stream_number-1))*tmp_arr_2.head(stream_number-1))
-            *(tmp_arr_3.head(stream_number-1)+tmp_arr_3.tail(stream_number-1))/4;
     //in radial turbine theory, optimized inlet angle is between 20deg to 40deg
     //here I set it at middle: M_PI/6
-    mass_flow_rate=density(0,0)*cos(M_PI/6)*area;
+//    mass_flow_rate=density(0,0)*cos(M_PI/6)*area;
 }
 
-void stream_solver::stream_direction()
+void stream_solver::calculate_stream_direction()
 {
     MatrixXd tmp_d_1(station_number,2), tmp_d_2(station_number,2);
     VectorXd tmp_d_3;
@@ -88,4 +85,15 @@ void stream_solver::stream_direction()
                                            *std::sqrt(std::pow((tmp_arr_d_1*tmp_arr_d_1/(tmp_arr_d_1*tmp_arr_d_1+tmp_arr_d_2*tmp_arr_d_2)),3))).transpose();
         meridian_stream_lenth.row(n1)=tmp_d_3.transpose();
     }
+}
+
+void stream_solver::calculate_area()
+{
+    ArrayXd od_distance, arc_length;
+    ArrayXd tmp_arr_1, tmp_arr_2;
+    tmp_arr_1=radius.topRows(stream_number-1)-radius.bottomRows(stream_number-1);
+    tmp_arr_2=z_axial.topRows(stream_number-1)-z_axial.bottomRows(stream_number-1);
+    od_distance=std::sqrt(tmp_arr_1*tmp_arr_1+tmp_arr_2*tmp_arr_2);
+    arc_length=radius.cwiseProduct(MatrixXd::Constant(stream_number,station_number,2*M_PI)-blade_number*thickness);
+    meridian_area=(arc_length.topRows(stream_number-1)+arc_length.bottomRows(stream_number-1))/2*od_distance;
 }

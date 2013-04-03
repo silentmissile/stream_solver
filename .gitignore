@@ -1,1 +1,3 @@
-stream_solver.pro.user
+*.pro.user
+\*~
+.directory

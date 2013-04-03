@@ -2,7 +2,6 @@
 #define STREAM_SOLVER_H
 
 #include <Eigen/Core>
-#include <Eigen/Array>
 #include <Eigen/Geometry>
 #include <cmath>
 #include "spline.h"
@@ -15,16 +14,18 @@ class STREAM_SOLVERSHARED_EXPORT stream_solver
 {
 public:
     //stream_solver();
-    stream_solver(const MatrixXd &r, const MatrixXd &z, const MatrixXd &t,
+    explicit stream_solver(const MatrixXd &r, const MatrixXd &z, const MatrixXd &t,
                   const int &bn, const int &sn, const int &stn,
                   const double &in_p, const double &in_t, const double &out_p,  const MatrixXd &cir,
-                  const double &rs, const MatrixXd &eff,
+                  const double &mf, const double &rs, const MatrixXd &eff,
                   const double &R, const double &gamma);
-    void stream_direction();
+    void calculate_stream_direction();
+    void calculate_area();
 private:
     int blade_number, stream_number, station_number;
     //in following geometry parameter matrixes
     //each row is for one stream line, from leading edge to trailing edge
+    //in each column, the points is from hub to tip
     //thickness is angular thickness not dimensional thickness
     MatrixXd radius, z_axial, thickness, beta, theta;
     MatrixXd meridian_stream_direction_z, meridian_stream_direction_r;
