@@ -19,8 +19,9 @@ public:
                   const double &in_p, const double &in_t, const double &out_p,  const MatrixXd &cir,
                   const double &mf, const double &rs, const MatrixXd &eff,
                   const double &R, const double &gamma);
-    void calculate_stream_direction();
+    void calculate_stream_directions();
     void calculate_area();
+    void flow_field_initialization();
 private:
     int blade_number, stream_number, station_number;
     //in following geometry parameter matrixes
