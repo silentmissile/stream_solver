@@ -19,15 +19,20 @@ public:
                   const double &in_p, const double &in_t, const double &out_p,  const MatrixXd &cir,
                   const double &mf, const double &rs, const MatrixXd &eff,
                   const double &R, const double &gamma);
+private:
+    void flow_field_initialization();
     void calculate_stream_directions();
     void calculate_area();
-    void flow_field_initialization();
-private:
+    void calculate_s2m();
+    void calculate_curvature_centrifugal(MatrixXd &res);
+    void interpolate_circulation();
+    void calculate_theta();
     int blade_number, stream_number, station_number;
     //in following geometry parameter matrixes
     //each row is for one stream line, from leading edge to trailing edge
     //in each column, the points is from hub to tip
     //thickness is angular thickness not dimensional thickness
+    MatrixXd radius_original, z_axial_original, circulation_original, thickness_original;
     MatrixXd radius, z_axial, thickness, beta, theta;
     MatrixXd meridian_stream_direction_z, meridian_stream_direction_r;
     MatrixXd meridian_stream_curvature, meridian_stream_lenth;
