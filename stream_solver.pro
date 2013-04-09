@@ -13,11 +13,13 @@ TEMPLATE = lib
 DEFINES += STREAM_SOLVER_LIBRARY
 
 SOURCES += stream_solver.cpp \
-    spline.cpp
+    spline.cpp \
+    math_ext.cpp
 
 HEADERS += stream_solver.h\
         stream_solver_global.h \
-    spline.h
+    spline.h \
+    math_ext.h
 
 unix:!symbian {
     maemo5 {

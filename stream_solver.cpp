@@ -88,7 +88,7 @@ void stream_solver::flow_field_initialization()
     beta.resizeLike(radius);
     beta.fill(0);
     theta.resizeLike(radius);
-    theta.fill(0);
+    theta.fill(M_PI/6);
     pressure.resizeLike(radius);
     temperature.resizeLike(radius);
     density.resizeLike(radius);
@@ -110,49 +110,70 @@ void stream_solver::flow_field_initialization()
     calculate_area();
     double rho;
     //initialize speed field
-    MatrixXd tmp_mat_1, spd_mat;
+    MatrixXd tmp_mat_1, tmp_mat_2, tmp_mat_3, spd_mat;
     rho=inlet_pressure/inlet_temperature/gas_constant;
     density.fill(rho);
     spd_mat=(MatrixXd::Constant(1,station_number,mass_flow_rate).cwiseQuotient(meridian_area.colwise().sum())/rho).colwise().replicate(stream_number);
     tmp_mat_1=(meridian_stream_direction_r.cwiseProduct(meridian_stream_direction_r)
                +meridian_stream_direction_z.cwiseProduct(meridian_stream_direction_z)).cwiseSqrt();
-    relative_speed_r=spd_mat.cwiseProduct(meridian_stream_direction_r).cwiseQuotient(tmp_mat_1);
-    relative_speed_z=spd_mat.cwiseProduct(meridian_stream_direction_z).cwiseQuotient(tmp_mat_1);
+    tmp_mat_1=(z_axial.row(stream_number-1)-z_axial.row(0)).colwise().replicate(stream_number);
+    tmp_mat_2=(radius.row(stream_number-1)-radius.row(0)).colwise().replicate(stream_number);
+    relative_speed_m=spd_mat.cwiseQuotient(math_ext::cos_subtract(meridian_stream_direction_z, meridian_stream_direction_r,
+                                                                  tmp_mat_2,tmp_mat_1));
+    relative_speed_r=relative_speed_m.cwiseProduct(meridian_stream_direction_r).cwiseQuotient(tmp_mat_1);
+    relative_speed_z=relative_speed_m.cwiseProduct(meridian_stream_direction_z).cwiseQuotient(tmp_mat_1);
 }
 
 void stream_solver::calculate_s2m()
 {
-    MatrixXd curvature_centrifugal_force;
-    calculate_curvature_centrifugal(curvature_centrifugal_force);
+    MatrixXd curvature_centrifugal_force, pressure_grandiant_force, thermal_grandiant_force;
+    curvature_centrifugal_force=calculate_curvature_centrifugal();
     interpolate_circulation();
+    calculate_theta();
 }
 
-void stream_solver::calculate_curvature_centrifugal(MatrixXd &res)
+MatrixXd stream_solver::calculate_curvature_centrifugal()//coefficient A
 {
-    MatrixXd cos_a, cos_b, sin_a, sin_b, tmp, tmp1, tmp2;
-    tmp=(meridian_stream_direction_r.cwiseProduct(meridian_stream_direction_r)
-         +meridian_stream_direction_z.cwiseProduct(meridian_stream_direction_z)).cwiseSqrt();
-    cos_a=meridian_stream_direction_r.cwiseQuotient(tmp);
-    sin_a=meridian_stream_direction_z.cwiseQuotient(tmp);
-    tmp1=z_axial.row(stream_number-1)-z_axial.row(0);
-    tmp2=radius.row(stream_number-1)-radius.row(0);
-    tmp=(tmp1.cwiseProduct(tmp1)+tmp2.cwiseProduct(tmp2)).cwiseSqrt();
-    cos_b=tmp1.cwiseQuotient(tmp).rowwise().replicate(stream_number);
-    sin_b=tmp2.cwiseQuotient(tmp).rowwise().replicate(stream_number);
-    res=(cos_a.cwiseProduct(cos_b)+sin_a.cwiseProduct(sin_b)).cwiseProduct(meridian_stream_curvature);
+    MatrixXd cos_a_substract_b, tmp1, tmp2;
+    tmp1=(z_axial.row(stream_number-1)-z_axial.row(0)).colwise().replicate(stream_number);
+    tmp2=(radius.row(stream_number-1)-radius.row(0)).colwise().replicate(stream_number);
+    cos_a_substract_b=math_ext::cos_subtract(meridian_stream_direction_z, meridian_stream_direction_r,
+                                             tmp2,tmp1);
+    return(cos_a_substract_b.cwiseProduct(meridian_stream_curvature));
 }
 
 void stream_solver::interpolate_circulation()
 {
-    MatrixXd q, delta_q, delta_circulation;
+    //because I use quasi-orthogonal mesh for computation
+    //and I move node along quasi-orthogonal line(movement is constrained
+    //so interpolate along quasi-orthogonal line only
     MatrixXd tmp1, tmp2;
     tmp1=z_axial_original.row(stream_number-1)-z_axial_original.row(0);
     tmp2=radius_original.row(stream_number-1)-radius.row(0);
-    q=(tmp1.cwiseProduct(tmp1)+tmp2.cwiseProduct(tmp2)).cwiseSqrt().rowwise().replicate(stream_number);
-    tmp1=z_axial-z_axial.row(0).rowwise().replicate(stream_number);
-    tmp2=radius-radius.row(0).rowwise().replicate(stream_number);
+    q=(tmp1.cwiseProduct(tmp1)+tmp2.cwiseProduct(tmp2)).cwiseSqrt().colwise().replicate(stream_number);
+    tmp1=z_axial-z_axial.row(0).colwise().replicate(stream_number);
+    tmp2=radius-radius.row(0).colwise().replicate(stream_number);
     delta_q=(tmp1.cwiseProduct(tmp1)+tmp2.cwiseProduct(tmp2)).cwiseSqrt();
-    delta_circulation=(circulation_original.row(stream_number-1)-circulation_original.row(0)).rowwise().replicate(stream_number);
-    circulation=circulation_original.row(0).rowwise().replicate(stream_number)
+    delta_circulation=(circulation_original.row(stream_number-1)-circulation_original.row(0)).colwise().replicate(stream_number);
+    circulation=circulation_original.row(0).colwise().replicate(stream_number)
             +delta_q.cwiseProduct(delta_circulation).cwiseQuotient(q);
+}
+
+void stream_solver::calculate_theta()
+{
+    MatrixXd tmp1, tmp2;
+    tmp1=rotate_speed*radius.cwiseProduct(radius);
+    tmp2=relative_speed_m.cwiseProduct(radius).cwiseProduct(radius);
+    tmp1=(circulation-tmp1).cwiseQuotient(tmp2);
+    tmp2=(tmp1.leftCols(station_number-1)+tmp1.rightCols(station_number-1))/2;
+    delta_theta=tmp2.cwiseProduct(meridian_stream_lenth);
+    for(int n1=1;n1<station_number;++n1)
+    {
+        theta.col(n1)=theta.col(n1-1)+delta_theta.col(n1-1);
+    }
+}
+
+MatrixXd stream_solver::calculate_pressure_grandiant()
+{
+    MatrixXd tmp1, tmp2;
 }

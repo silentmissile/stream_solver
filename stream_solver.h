@@ -5,6 +5,7 @@
 #include <Eigen/Geometry>
 #include <cmath>
 #include "spline.h"
+#include "math_ext.h"
 #include "stream_solver_global.h"
 
 using namespace std;
@@ -24,7 +25,9 @@ private:
     void calculate_stream_directions();
     void calculate_area();
     void calculate_s2m();
-    void calculate_curvature_centrifugal(MatrixXd &res);
+    MatrixXd calculate_curvature_centrifugal();//coefficient A
+    MatrixXd calculate_pressure_grandiant();//coefficient B
+    MatrixXd calculate_thermal_grandiant();//coefficiant C
     void interpolate_circulation();
     void calculate_theta();
     int blade_number, stream_number, station_number;
@@ -46,7 +49,8 @@ private:
     double gas_constant, heat_capacity_ratio;
     //flow parameter for grid
     MatrixXd pressure, temperature, density, enthalpy, entropy;
-    MatrixXd relative_speed_r, relative_speed_z, relative_speed_theta;
+    MatrixXd relative_speed_r, relative_speed_z, relative_speed_m, relative_speed_theta;
+    MatrixXd delta_theta, q, delta_q, delta_circulation;
 };
 
 #endif // STREAM_SOLVER_H
