@@ -4,7 +4,7 @@
 #
 #-------------------------------------------------
 
-INCLUDEPATH += /home/name/Develop/eigen-eigen-3.1.2/
+INCLUDEPATH += /home/name/Develop/eigen-eigen-3.1.3/
 QT       -= gui
 
 TARGET = stream_solver

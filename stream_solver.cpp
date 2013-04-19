@@ -46,16 +46,19 @@ void stream_solver::calculate_stream_directions()
     MatrixXd tmp_d_1(station_number,2), tmp_d_2(station_number,2);
     VectorXd tmp_d_3;
     ArrayXd tmp_arr_d_1, tmp_arr_d_2, tmp_arr_d_3, tmp_arr_d_4;
+    meridian_stream_lenth.col(0).fill(0);
     for(int n1=0;n1<stream_number;++n1)
     {
         //in radial turbine, z increase with flow, and r reduce with flow
         //assume flow direction of turbine wheel
         //at leading edge, flow direction is oposite of r Vector2d(0,-1)
         //at trailing edge, flow direction is along z Vector2d(1,0)
-        if(!spline::spline_parametric(z_axial.row(n1),radius.row(n1),
-                                      Vector2d(0,-1),Vector2d(1,0),
-                                      tmp_d_1,tmp_d_2,tmp_d_3))
-            return;
+        spline s(z_axial.row(n1).transpose(),radius.row(n1).transpose(),
+                 spline_endpoint_direction_2d(Vector2d(0,-1)),
+                 spline_endpoint_direction_2d(Vector2d(1,0)));
+        tmp_d_1=s.get_dif_1();
+        tmp_d_2=s.get_dif_2();
+        tmp_d_3=s.get_length();
         meridian_stream_direction_z.row(n1)=tmp_d_1.col(0).transpose();
         meridian_stream_direction_r.row(n1)=tmp_d_1.col(1).transpose();
         tmp_arr_d_1=tmp_d_1.col(0).array();
@@ -106,6 +109,9 @@ void stream_solver::flow_field_initialization()
     meridian_stream_curvature.resizeLike(radius);
     meridian_stream_lenth.resize(stream_number,station_number-1);
     meridian_area.resize(stream_number-1,station_number);
+    dtheta_dm.resizeLike(radius);
+    dcirculation_dm.resizeLike(radius);
+    dwm_dm.resizeLike(radius);
     calculate_stream_directions();
     calculate_area();
     double rho;
@@ -126,13 +132,13 @@ void stream_solver::flow_field_initialization()
 
 void stream_solver::calculate_s2m()
 {
-    MatrixXd curvature_centrifugal_force, pressure_grandiant_force, thermal_grandiant_force;
     curvature_centrifugal_force=calculate_curvature_centrifugal();
     interpolate_circulation();
+    calculate_dtheta_dm();
     calculate_theta();
 }
 
-MatrixXd stream_solver::calculate_curvature_centrifugal()//coefficient A
+MatrixXd stream_solver::calculate_curvature_centrifugal()//coefficient A, page 252, equation 3-77a
 {
     MatrixXd cos_a_substract_b, tmp1, tmp2;
     tmp1=(z_axial.row(stream_number-1)-z_axial.row(0)).colwise().replicate(stream_number);
@@ -145,7 +151,7 @@ MatrixXd stream_solver::calculate_curvature_centrifugal()//coefficient A
 void stream_solver::interpolate_circulation()
 {
     //because I use quasi-orthogonal mesh for computation
-    //and I move node along quasi-orthogonal line(movement is constrained
+    //and I move node along quasi-orthogonal line(movement is constrained)
     //so interpolate along quasi-orthogonal line only
     MatrixXd tmp1, tmp2;
     tmp1=z_axial_original.row(stream_number-1)-z_axial_original.row(0);
@@ -159,21 +165,69 @@ void stream_solver::interpolate_circulation()
             +delta_q.cwiseProduct(delta_circulation).cwiseQuotient(q);
 }
 
-void stream_solver::calculate_theta()
+void stream_solver::calculate_theta()//page 252, equation 3-77d
 {
-    MatrixXd tmp1, tmp2;
-    tmp1=rotate_speed*radius.cwiseProduct(radius);
-    tmp2=relative_speed_m.cwiseProduct(radius).cwiseProduct(radius);
-    tmp1=(circulation-tmp1).cwiseQuotient(tmp2);
-    tmp2=(tmp1.leftCols(station_number-1)+tmp1.rightCols(station_number-1))/2;
-    delta_theta=tmp2.cwiseProduct(meridian_stream_lenth);
+    MatrixXd tmp1=(dtheta_dm.leftCols(station_number-1)+dtheta_dm.rightCols(station_number-1))/2;
+    delta_theta=tmp1.cwiseProduct(meridian_stream_lenth);
     for(int n1=1;n1<station_number;++n1)
     {
         theta.col(n1)=theta.col(n1-1)+delta_theta.col(n1-1);
     }
 }
 
-MatrixXd stream_solver::calculate_pressure_grandiant()
+void stream_solver::calculate_dtheta_dm()
 {
     MatrixXd tmp1, tmp2;
+    tmp1=rotate_speed*radius.cwiseProduct(radius);
+    tmp2=relative_speed_m.cwiseProduct(radius).cwiseProduct(radius);
+    dtheta_dm=(circulation-tmp1).cwiseQuotient(tmp2);
+}
+
+MatrixXd stream_solver::calculate_pressure_grandiant()//coefficient B, page 252, equation 3-77b
+{
+    MatrixXd tmp1, tmp2;
+    VectorXd tmp_vec_1(station_number), tmp_vec_2(station_number);
+    tmp_vec_1(0)=0;
+    //stream line length m is sorted by spanwise
+    //so calculate dcirculation_dm and dwm_dm by spanwise
+    for(int n1=0;n1<stream_number;++n1)
+    {
+        for(int n2=1;n2<station_number;++n2)
+        {
+            tmp_vec_1(n2)=tmp_vec_1(n2-1)+meridian_stream_lenth(n1,n2-1);
+        }
+        spline s(tmp_vec_1,circulation.row(n1));
+        tmp1=s.get_dif_1();
+        dcirculation_dm.row(n1)=tmp1.col(1).cwiseQuotient(tmp1.col(0)).transpose();
+        tmp_vec_2=(relative_speed_r.cwiseProduct(relative_speed_r)
+                   +relative_speed_z.cwiseProduct(relative_speed_z)
+                   ).cwiseSqrt();
+        s.input(tmp_vec_1,tmp_vec_2);
+        tmp1=s.get_dif_1();
+        dwm_dm.row(n1)=tmp1.col(1).cwiseQuotient(tmp1.col(0)).transpose();
+    }
+    //spanwise length q is sorted by flow direction
+    //so calculate dtheta_dq and dcirculation_dq by stations
+    tmp2=q.cwiseProduct(delta_q);
+    for(int n1=0;n1<station_number;++n1)
+    {
+        tmp_vec_1=tmp2.col(n1);
+        spline s(tmp_vec_1,theta.col(n1));
+        tmp1=s.get_dif_1();
+        dtheta_dq.col(n1)=tmp1.col(1).cwiseQuotient(tmp1.col(0));
+        s.input(tmp_vec_1,circulation.col(n1));
+        tmp1=s.get_dif_1();
+        dcirculation_dq.col(n1)=tmp1.col(1).cwiseQuotient(tmp1.col(0));
+    }
+    tmp1=(z_axial.row(stream_number-1)-z_axial.row(0)).colwise().replicate(stream_number);
+    tmp2=(radius.row(stream_number-1)-radius.row(0)).colwise().replicate(stream_number);
+    return(dcirculation_dm.cwiseProduct(dtheta_dq)
+           -dcirculation_dq.cwiseProduct(dtheta_dm)
+           +dwm_dm.cwiseProduct(math_ext::sin_subtract(meridian_stream_direction_z, meridian_stream_direction_r,
+                                                       tmp2,tmp1)));
+}
+
+MatrixXd stream_solver::calculate_thermal_grandiant()//coefficient C, page 252, equation 3-77c
+{
+    MatrixXd tmp1;
 }

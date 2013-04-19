@@ -30,6 +30,7 @@ private:
     MatrixXd calculate_thermal_grandiant();//coefficiant C
     void interpolate_circulation();
     void calculate_theta();
+    void calculate_dtheta_dm();
     int blade_number, stream_number, station_number;
     //in following geometry parameter matrixes
     //each row is for one stream line, from leading edge to trailing edge
@@ -51,6 +52,8 @@ private:
     MatrixXd pressure, temperature, density, enthalpy, entropy;
     MatrixXd relative_speed_r, relative_speed_z, relative_speed_m, relative_speed_theta;
     MatrixXd delta_theta, q, delta_q, delta_circulation;
+    MatrixXd curvature_centrifugal_force, pressure_grandiant_force, thermal_grandiant_force;
+    MatrixXd dtheta_dm, dcirculation_dm, dwm_dm, dtheta_dq, dcirculation_dq;
 };
 
 #endif // STREAM_SOLVER_H
