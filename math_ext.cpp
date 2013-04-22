@@ -51,3 +51,17 @@ void math_ext::sin_and_cos(const MatrixXd &dx1, const MatrixXd &dy1,
     cos_2=dx2.cwiseQuotient(tmp);
     sin_2=dy2.cwiseQuotient(tmp);
 }
+
+VectorXd math_ext::runge_kutta(const double &x0, const VectorXd &dif_1, const VectorXd &q)
+{
+    const int n=dif_1.size();
+    VectorXd tmp1(n), tmp2(n);
+    tmp1(0)=x0;
+    tmp2(0)=x0;
+    for(int n1=1;n2<n;++n1)
+    {
+        tmp1(n1)=tmp1(n1-1)+dif_1(n1-1)*(q(n1)-q(n1-1));
+        tmp2(n1)=tmp1(n1-1)+dif_1(n1)*(q(n1)-q(n1-1));
+    }
+    return((tmp1+tmp2)/2);
+}

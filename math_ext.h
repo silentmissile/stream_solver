@@ -17,6 +17,7 @@ public:
                                    const MatrixXd &dx2, const MatrixXd &dy2);
     static MatrixXd sin_subtract(const MatrixXd &dx1, const MatrixXd &dy1,
                                        const MatrixXd &dx2, const MatrixXd &dy2);
+    static VectorXd runge_kutta(const double &x0, const VectorXd &dif_1, const VectorXd &q);
 private:
     static void sin_and_cos(const MatrixXd &dx1, const MatrixXd &dy1,
                             const MatrixXd &dx2, const MatrixXd &dy2,

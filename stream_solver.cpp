@@ -3,6 +3,7 @@
 stream_solver::stream_solver(const MatrixXd &r, const MatrixXd &z, const MatrixXd &t,
                              const int &bn, const int &sn, const int &stn,
                              const double &in_p, const double &in_t, const double &out_p, const MatrixXd &cir,
+                             const VectorXd &total_enthalpy_in, const VectorXd &circulation_in, const VectorXd &entropy_in,
                              const double &mf, const double &rs, const MatrixXd &eff,
                              const double &R, const double &gamma)
 {
@@ -17,7 +18,10 @@ stream_solver::stream_solver(const MatrixXd &r, const MatrixXd &z, const MatrixX
             ||tmp_i_1!=eff.rows()
             ||tmp_i_2!=eff.cols()
             ||tmp_i_1!=cir.rows()
-            ||tmp_i_2!=cir.cols())
+            ||tmp_i_2!=cir.cols()
+            ||tmp_i_1!=total_enthalpy_in.size()
+            ||tmp_i_1!=circulation_in.size()
+            ||tmp_i_1!=entropy_in.size())
         return;
     //import input data
     stream_number=tmp_i_1;
@@ -32,6 +36,9 @@ stream_solver::stream_solver(const MatrixXd &r, const MatrixXd &z, const MatrixX
     inlet_pressure=in_p;
     inlet_temperature=in_t;
     outlet_pressure=out_p;
+    total_enthalpy_inlet=total_enthalpy_in;
+    circulation_inlet=circulation_in;
+    entropy_inlet=entropy_in;
     mass_flow_rate=mf;
     rotate_speed=rs;
     wheel_efficiency=eff;
@@ -101,9 +108,10 @@ void stream_solver::flow_field_initialization()
     relative_speed_z.resizeLike(radius);
     relative_speed_theta.resizeLike(radius);
     pressure.col(0).setConstant(inlet_pressure);
-    temperature.col(0).setConstant(inlet_temperature);
-    density.col(0).setConstant(inlet_pressure/gas_constant/inlet_temperature);
-    entropy.col(0).setConstant(0);
+    temperature.fill(inlet_temperature);
+    density.fill(inlet_pressure/gas_constant/inlet_temperature);
+    enthalpy.fill(0);//?
+    entropy.fill(0);
     meridian_stream_direction_r.resizeLike(radius);
     meridian_stream_direction_z.resizeLike(radius);
     meridian_stream_curvature.resizeLike(radius);
@@ -136,6 +144,11 @@ void stream_solver::calculate_s2m()
     interpolate_circulation();
     calculate_dtheta_dm();
     calculate_theta();
+    pressure_grandiant_force=calculate_pressure_gradiant();
+    thermal_grandiant_force=calculate_pressure_gradiant();
+    //page 252, equation 3-77
+    MatrixXd dwm_dq=curvature_centrifugal_force.cwiseProduct(relative_speed_m)
+            +pressure_grandiant_force+thermal_grandiant_force.cwiseQuotient(relative_speed_m);
 }
 
 MatrixXd stream_solver::calculate_curvature_centrifugal()//coefficient A, page 252, equation 3-77a
@@ -183,7 +196,7 @@ void stream_solver::calculate_dtheta_dm()
     dtheta_dm=(circulation-tmp1).cwiseQuotient(tmp2);
 }
 
-MatrixXd stream_solver::calculate_pressure_grandiant()//coefficient B, page 252, equation 3-77b
+MatrixXd stream_solver::calculate_pressure_gradiant()//coefficient B, page 252, equation 3-77b
 {
     MatrixXd tmp1, tmp2;
     VectorXd tmp_vec_1(station_number), tmp_vec_2(station_number);
@@ -211,11 +224,10 @@ MatrixXd stream_solver::calculate_pressure_grandiant()//coefficient B, page 252,
     tmp2=q.cwiseProduct(delta_q);
     for(int n1=0;n1<station_number;++n1)
     {
-        tmp_vec_1=tmp2.col(n1);
-        spline s(tmp_vec_1,theta.col(n1));
+        spline s(tmp2.col(n1),theta.col(n1));
         tmp1=s.get_dif_1();
         dtheta_dq.col(n1)=tmp1.col(1).cwiseQuotient(tmp1.col(0));
-        s.input(tmp_vec_1,circulation.col(n1));
+        s.input(tmp2.col(n1),circulation.col(n1));
         tmp1=s.get_dif_1();
         dcirculation_dq.col(n1)=tmp1.col(1).cwiseQuotient(tmp1.col(0));
     }
@@ -227,7 +239,30 @@ MatrixXd stream_solver::calculate_pressure_grandiant()//coefficient B, page 252,
                                                        tmp2,tmp1)));
 }
 
-MatrixXd stream_solver::calculate_thermal_grandiant()//coefficient C, page 252, equation 3-77c
+MatrixXd stream_solver::calculate_thermal_gradiant()//coefficient C, page 252, equation 3-77c
 {
-    MatrixXd tmp1;
+    MatrixXd tmp1=q.cwiseProduct(delta_q), tmp2;
+    MatrixXd total_enthalpy_gradient(stream_number,station_number),
+            circulation_gradient(stream_number,station_number),
+            entropy_gradient(stream_number,station_number);
+    for(int n1=0;n1<station_number;++n1)
+    {
+        spline s(tmp1.col(n1),total_enthalpy_inlet);
+        tmp2=s.get_dif_1();
+        total_enthalpy_gradient.col(n1)=tmp2.rowwise().norm();
+        s.input(tmp1.col(n1),circulation_inlet);
+        tmp2=s.get_dif_1();
+        circulation_gradient.col(n1)=tmp2.rowwise().norm();
+        s.input(tmp1.col(n1),entropy_inlet);
+        tmp2=s.get_dif_1();
+        entropy_gradient.col(n1)=tmp2.rowwise().norm();
+    }
+    circulation_gradient*=rotate_speed;
+    entropy_gradient=entropy_gradient.cwiseProduct(temperature);
+    return(total_enthalpy_gradient+circulation_gradient+entropy_gradient);
+}
+
+void stream_solver::calculate_mass_flow(double &wm_hub)//page 229, equation 3-41
+{
+
 }

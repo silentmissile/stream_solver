@@ -16,21 +16,23 @@ class STREAM_SOLVERSHARED_EXPORT stream_solver
 public:
     //stream_solver();
     explicit stream_solver(const MatrixXd &r, const MatrixXd &z, const MatrixXd &t,
-                  const int &bn, const int &sn, const int &stn,
-                  const double &in_p, const double &in_t, const double &out_p,  const MatrixXd &cir,
-                  const double &mf, const double &rs, const MatrixXd &eff,
-                  const double &R, const double &gamma);
+                           const int &bn, const int &sn, const int &stn,
+                           const double &in_p, const double &in_t, const double &out_p, const MatrixXd &cir,
+                           const VectorXd &total_enthalpy_in, const VectorXd &circulation_in, const VectorXd &entropy_in,
+                           const double &mf, const double &rs, const MatrixXd &eff,
+                           const double &R, const double &gamma);
 private:
     void flow_field_initialization();
     void calculate_stream_directions();
     void calculate_area();
     void calculate_s2m();
     MatrixXd calculate_curvature_centrifugal();//coefficient A
-    MatrixXd calculate_pressure_grandiant();//coefficient B
-    MatrixXd calculate_thermal_grandiant();//coefficiant C
+    MatrixXd calculate_pressure_gradiant();//coefficient B
+    MatrixXd calculate_thermal_gradiant();//coefficiant C
     void interpolate_circulation();
     void calculate_theta();
     void calculate_dtheta_dm();
+    void calculate_mass_flow(double &wm_hub);
     int blade_number, stream_number, station_number;
     //in following geometry parameter matrixes
     //each row is for one stream line, from leading edge to trailing edge
@@ -46,6 +48,7 @@ private:
     MatrixXd circulation;
     double rotate_speed;
     MatrixXd wheel_efficiency;
+    VectorXd total_enthalpy_inlet, circulation_inlet, entropy_inlet;
     //material property
     double gas_constant, heat_capacity_ratio;
     //flow parameter for grid
