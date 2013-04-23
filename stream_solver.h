@@ -32,7 +32,7 @@ private:
     void interpolate_circulation();
     void calculate_theta();
     void calculate_dtheta_dm();
-    void calculate_mass_flow(double &wm_hub);
+    double calculate_station_mass_flow(const double &wm_hub, const VectorXd &dif_1, const int &station);
     int blade_number, stream_number, station_number;
     //in following geometry parameter matrixes
     //each row is for one stream line, from leading edge to trailing edge

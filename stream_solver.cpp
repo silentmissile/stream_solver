@@ -80,13 +80,14 @@ void stream_solver::calculate_stream_directions()
 
 void stream_solver::calculate_area()
 {
-    ArrayXd od_distance, arc_length;
-    ArrayXd tmp_arr_1, tmp_arr_2;
-    tmp_arr_1=radius.topRows(stream_number-1)-radius.bottomRows(stream_number-1);
-    tmp_arr_2=z_axial.topRows(stream_number-1)-z_axial.bottomRows(stream_number-1);
-    od_distance=std::sqrt(tmp_arr_1*tmp_arr_1+tmp_arr_2*tmp_arr_2);
+    MatrixXd arc_length, tmp1, tmp2;
+    tmp1=radius.topRows(stream_number-1)-radius.bottomRows(stream_number-1);
+    tmp2=z_axial.topRows(stream_number-1)-z_axial.bottomRows(stream_number-1);
+    delta_q.row(0).fill(0);
+    delta_q.bottomRows(stream_number-1)=(tmp1.cwiseProduct(tmp1)+tmp2.cwiseProduct(tmp2)).cwiseSqrt();
     arc_length=radius.cwiseProduct(MatrixXd::Constant(stream_number,station_number,2*M_PI)-blade_number*thickness);
-    meridian_area=(arc_length.topRows(stream_number-1)+arc_length.bottomRows(stream_number-1))/2*od_distance;
+    meridian_area=(arc_length.topRows(stream_number-1)+arc_length.bottomRows(stream_number-1)).cwiseProduct(delta_q.bottomRows(stream_number-1))/2;
+    q=delta_q.colwise().sum().colwise().replicate(stream_number);
 }
 
 void stream_solver::flow_field_initialization()
@@ -166,16 +167,15 @@ void stream_solver::interpolate_circulation()
     //because I use quasi-orthogonal mesh for computation
     //and I move node along quasi-orthogonal line(movement is constrained)
     //so interpolate along quasi-orthogonal line only
-    MatrixXd tmp1, tmp2;
-    tmp1=z_axial_original.row(stream_number-1)-z_axial_original.row(0);
-    tmp2=radius_original.row(stream_number-1)-radius.row(0);
-    q=(tmp1.cwiseProduct(tmp1)+tmp2.cwiseProduct(tmp2)).cwiseSqrt().colwise().replicate(stream_number);
-    tmp1=z_axial-z_axial.row(0).colwise().replicate(stream_number);
-    tmp2=radius-radius.row(0).colwise().replicate(stream_number);
-    delta_q=(tmp1.cwiseProduct(tmp1)+tmp2.cwiseProduct(tmp2)).cwiseSqrt();
+    MatrixXd tmp(stream_number,station_number);
     delta_circulation=(circulation_original.row(stream_number-1)-circulation_original.row(0)).colwise().replicate(stream_number);
+    tmp.row(0).fill(0);
+    for(int n1=1;n1<stream_number;++n1)
+    {
+        tmp.row(n1)=tmp.row(n1-1)+delta_q.row(n1);
+    }
     circulation=circulation_original.row(0).colwise().replicate(stream_number)
-            +delta_q.cwiseProduct(delta_circulation).cwiseQuotient(q);
+            +tmp.cwiseProduct(delta_circulation).cwiseQuotient(q);
 }
 
 void stream_solver::calculate_theta()//page 252, equation 3-77d
@@ -198,7 +198,7 @@ void stream_solver::calculate_dtheta_dm()
 
 MatrixXd stream_solver::calculate_pressure_gradiant()//coefficient B, page 252, equation 3-77b
 {
-    MatrixXd tmp1, tmp2;
+    MatrixXd tmp1, tmp2(stream_number,station_number);
     VectorXd tmp_vec_1(station_number), tmp_vec_2(station_number);
     tmp_vec_1(0)=0;
     //stream line length m is sorted by spanwise
@@ -221,7 +221,11 @@ MatrixXd stream_solver::calculate_pressure_gradiant()//coefficient B, page 252, 
     }
     //spanwise length q is sorted by flow direction
     //so calculate dtheta_dq and dcirculation_dq by stations
-    tmp2=q.cwiseProduct(delta_q);
+    tmp2.row(0).fill(0);
+    for(int n1=1;n1<stream_number;++n1)
+    {
+        tmp2.row(n1)=tmp2.row(n1-1)+delta_q.row(n1);
+    }
     for(int n1=0;n1<station_number;++n1)
     {
         spline s(tmp2.col(n1),theta.col(n1));
@@ -241,10 +245,14 @@ MatrixXd stream_solver::calculate_pressure_gradiant()//coefficient B, page 252, 
 
 MatrixXd stream_solver::calculate_thermal_gradiant()//coefficient C, page 252, equation 3-77c
 {
-    MatrixXd tmp1=q.cwiseProduct(delta_q), tmp2;
-    MatrixXd total_enthalpy_gradient(stream_number,station_number),
+    MatrixXd tmp1(stream_number,station_number), tmp2,
+            total_enthalpy_gradient(stream_number,station_number),
             circulation_gradient(stream_number,station_number),
             entropy_gradient(stream_number,station_number);
+    for(int n1=1;n1<stream_number;++n1)
+    {
+        tmp1.row(n1)=tmp1.row(n1-1)+delta_q.row(n1);
+    }
     for(int n1=0;n1<station_number;++n1)
     {
         spline s(tmp1.col(n1),total_enthalpy_inlet);
@@ -262,7 +270,16 @@ MatrixXd stream_solver::calculate_thermal_gradiant()//coefficient C, page 252, e
     return(total_enthalpy_gradient+circulation_gradient+entropy_gradient);
 }
 
-void stream_solver::calculate_mass_flow(double &wm_hub)//page 229, equation 3-41
+double stream_solver::calculate_station_mass_flow(const double &wm_hub, const VectorXd &dif_1, const int &station)
+//page 229, equation 3-41
 {
-
+    //page 231, equation 3-43 to 3-45
+    //Runge-Kutta integral
+    VectorXd spd=math_ext::runge_kutta(wm_hub,dif_1,delta_q.block(1,station,stream_number-1,1));
+    const int n=dif_1.size();
+    VectorXd flow_ave, tmp_vec_1, tmp_vec_2;
+    tmp_vec_1=spd.cwiseProduct(density.col(station));
+    tmp_vec_2=(tmp_vec_1.head(n-1)+tmp_vec_1.tail(n-1))/2;
+    flow_ave=tmp_vec_2.cwiseProduct(meridian_area.col(station));
+    return(flow_ave.sum());
 }
