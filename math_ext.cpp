@@ -61,8 +61,8 @@ VectorXd math_ext::runge_kutta(const double &x0, const VectorXd &dif_1, const Ve
     res(0)=x0;
     for(int n1=0;n1<n-1;++n1)
     {
-        tmp1=spd(n1)+dif_1(n1)*delta_x(n1);
-        tmp2=spd(n1)+dif_1(n1+1)*delta_x(n1);
+        tmp1=res(n1)+dif_1(n1)*delta_x(n1);
+        tmp2=res(n1)+dif_1(n1+1)*delta_x(n1);
         res(n1+1)=(tmp1+tmp2)/2;
     }
     return(res);

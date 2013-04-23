@@ -3,7 +3,7 @@
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
-#include <cmath>
+#include "thermaldynamic_equations.h"
 #include "spline.h"
 #include "math_ext.h"
 #include "stream_solver_global.h"
@@ -18,7 +18,7 @@ public:
     explicit stream_solver(const MatrixXd &r, const MatrixXd &z, const MatrixXd &t,
                            const int &bn, const int &sn, const int &stn,
                            const double &in_p, const double &in_t, const double &out_p, const MatrixXd &cir,
-                           const VectorXd &total_enthalpy_in, const VectorXd &circulation_in, const VectorXd &entropy_in,
+                           const VectorXd &circulation_in, const VectorXd &entropy_in,
                            const double &mf, const double &rs, const MatrixXd &eff,
                            const double &R, const double &gamma);
 private:
@@ -32,6 +32,7 @@ private:
     void interpolate_circulation();
     void calculate_theta();
     void calculate_dtheta_dm();
+    void calculate_efficiency_grid();
     double calculate_station_mass_flow(const double &wm_hub, const VectorXd &dif_1, const int &station);
     int blade_number, stream_number, station_number;
     //in following geometry parameter matrixes
@@ -41,18 +42,18 @@ private:
     MatrixXd radius_original, z_axial_original, circulation_original, thickness_original;
     MatrixXd radius, z_axial, thickness, beta, theta;
     MatrixXd meridian_stream_direction_z, meridian_stream_direction_r;
-    MatrixXd meridian_stream_curvature, meridian_stream_lenth;
+    MatrixXd meridian_stream_curvature, meridian_stream_length;
     MatrixXd meridian_area;
     //boundary conditions
-    double inlet_pressure, inlet_temperature, outlet_pressure, mass_flow_rate;
+    double inlet_total_pressure, inlet_total_temperature, outlet_pressure, mass_flow_rate;
     MatrixXd circulation;
     double rotate_speed;
     MatrixXd wheel_efficiency;
     VectorXd total_enthalpy_inlet, circulation_inlet, entropy_inlet;
     //material property
-    double gas_constant, heat_capacity_ratio;
+    double gas_constant, heat_capacity_ratio, Cp;
     //flow parameter for grid
-    MatrixXd pressure, temperature, density, enthalpy, entropy;
+    MatrixXd pressure, temperature, density, enthalpy, entropy, rothalpy, efficiency_grid;
     MatrixXd relative_speed_r, relative_speed_z, relative_speed_m, relative_speed_theta;
     MatrixXd delta_theta, q, delta_q, delta_circulation;
     MatrixXd curvature_centrifugal_force, pressure_grandiant_force, thermal_grandiant_force;

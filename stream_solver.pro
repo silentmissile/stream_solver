@@ -14,12 +14,14 @@ DEFINES += STREAM_SOLVER_LIBRARY
 
 SOURCES += stream_solver.cpp \
     spline.cpp \
-    math_ext.cpp
+    math_ext.cpp \
+    thermaldynamic_equations.cpp
 
 HEADERS += stream_solver.h\
         stream_solver_global.h \
     spline.h \
-    math_ext.h
+    math_ext.h \
+    thermaldynamic_equations.h
 
 unix:!symbian {
     maemo5 {

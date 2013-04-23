@@ -2,8 +2,8 @@
 
 stream_solver::stream_solver(const MatrixXd &r, const MatrixXd &z, const MatrixXd &t,
                              const int &bn, const int &sn, const int &stn,
-                             const double &in_p, const double &in_t, const double &out_p, const MatrixXd &cir,
-                             const VectorXd &total_enthalpy_in, const VectorXd &circulation_in, const VectorXd &entropy_in,
+                             const double &in_p0, const double &in_t0, const double &out_p, const MatrixXd &cir,
+                             const VectorXd &circulation_in, const VectorXd &entropy_in,
                              const double &mf, const double &rs, const MatrixXd &eff,
                              const double &R, const double &gamma)
 {
@@ -19,8 +19,9 @@ stream_solver::stream_solver(const MatrixXd &r, const MatrixXd &z, const MatrixX
             ||tmp_i_2!=eff.cols()
             ||tmp_i_1!=cir.rows()
             ||tmp_i_2!=cir.cols()
-            ||tmp_i_1!=total_enthalpy_in.size()
             ||tmp_i_1!=circulation_in.size()
+            ||cir(0,0)!=circulation_in(0)
+            ||cir(tmp_i_1-1,0)!=circulation_in(tmp_i_1-1)
             ||tmp_i_1!=entropy_in.size())
         return;
     //import input data
@@ -33,10 +34,12 @@ stream_solver::stream_solver(const MatrixXd &r, const MatrixXd &z, const MatrixX
     blade_number=bn;
     stream_number=sn;
     station_number=stn;
-    inlet_pressure=in_p;
-    inlet_temperature=in_t;
+    inlet_total_pressure=in_p0;
+    inlet_total_temperature=in_t0;
     outlet_pressure=out_p;
-    total_enthalpy_inlet=total_enthalpy_in;
+    Cp=heat_capacity_ratio*gas_constant/(heat_capacity_ratio-1);
+    total_enthalpy_inlet.resize(stream_number);
+    total_enthalpy_inlet.fill(Cp*inlet_total_temperature);
     circulation_inlet=circulation_in;
     entropy_inlet=entropy_in;
     mass_flow_rate=mf;
@@ -53,7 +56,7 @@ void stream_solver::calculate_stream_directions()
     MatrixXd tmp_d_1(station_number,2), tmp_d_2(station_number,2);
     VectorXd tmp_d_3;
     ArrayXd tmp_arr_d_1, tmp_arr_d_2, tmp_arr_d_3, tmp_arr_d_4;
-    meridian_stream_lenth.col(0).fill(0);
+    meridian_stream_length.col(0).fill(0);
     for(int n1=0;n1<stream_number;++n1)
     {
         //in radial turbine, z increase with flow, and r reduce with flow
@@ -74,7 +77,7 @@ void stream_solver::calculate_stream_directions()
         tmp_arr_d_4=tmp_d_2.col(1).array();
         meridian_stream_curvature.row(n1)=(tmp_arr_d_4/tmp_arr_d_3
                                            *std::sqrt(std::pow((tmp_arr_d_1*tmp_arr_d_1/(tmp_arr_d_1*tmp_arr_d_1+tmp_arr_d_2*tmp_arr_d_2)),3))).transpose();
-        meridian_stream_lenth.row(n1)=tmp_d_3.transpose();
+        meridian_stream_length.row(n1)=tmp_d_3.transpose();
     }
 }
 
@@ -96,6 +99,8 @@ void stream_solver::flow_field_initialization()
     z_axial=z_axial_original;
     circulation=circulation_original;
     thickness=thickness_original;
+    calculate_stream_directions();
+    calculate_area();
     beta.resizeLike(radius);
     beta.fill(0);
     theta.resizeLike(radius);
@@ -108,27 +113,28 @@ void stream_solver::flow_field_initialization()
     relative_speed_r.resizeLike(radius);
     relative_speed_z.resizeLike(radius);
     relative_speed_theta.resizeLike(radius);
-    pressure.col(0).setConstant(inlet_pressure);
-    temperature.fill(inlet_temperature);
-    density.fill(inlet_pressure/gas_constant/inlet_temperature);
-    enthalpy.fill(0);//?
+    double in_p, in_t, in_den;
+    thermaldynamic_equations::total_to_static(inlet_total_pressure, inlet_total_temperature,
+                                              meridian_area.col(0).sum()*cos(M_PI/6),
+                                              mass_flow_rate,gas_constant,heat_capacity_ratio,
+                                              in_p,in_t,in_den);
+    pressure.fill(in_p);
+    temperature.fill(in_t);
+    density.fill(in_den);
+    enthalpy.fill(Cp*in_t);
     entropy.fill(0);
     meridian_stream_direction_r.resizeLike(radius);
     meridian_stream_direction_z.resizeLike(radius);
     meridian_stream_curvature.resizeLike(radius);
-    meridian_stream_lenth.resize(stream_number,station_number-1);
+    meridian_stream_length.resize(stream_number,station_number-1);
+    efficiency_grid.resizeLike(meridian_stream_length);
     meridian_area.resize(stream_number-1,station_number);
     dtheta_dm.resizeLike(radius);
     dcirculation_dm.resizeLike(radius);
     dwm_dm.resizeLike(radius);
-    calculate_stream_directions();
-    calculate_area();
-    double rho;
     //initialize speed field
-    MatrixXd tmp_mat_1, tmp_mat_2, tmp_mat_3, spd_mat;
-    rho=inlet_pressure/inlet_temperature/gas_constant;
-    density.fill(rho);
-    spd_mat=(MatrixXd::Constant(1,station_number,mass_flow_rate).cwiseQuotient(meridian_area.colwise().sum())/rho).colwise().replicate(stream_number);
+    MatrixXd tmp_mat_1, tmp_mat_2, spd_mat;
+    spd_mat=(MatrixXd::Constant(1,station_number,mass_flow_rate).cwiseQuotient(meridian_area.colwise().sum())/density(0,0)).colwise().replicate(stream_number);
     tmp_mat_1=(meridian_stream_direction_r.cwiseProduct(meridian_stream_direction_r)
                +meridian_stream_direction_z.cwiseProduct(meridian_stream_direction_z)).cwiseSqrt();
     tmp_mat_1=(z_axial.row(stream_number-1)-z_axial.row(0)).colwise().replicate(stream_number);
@@ -137,6 +143,7 @@ void stream_solver::flow_field_initialization()
                                                                   tmp_mat_2,tmp_mat_1));
     relative_speed_r=relative_speed_m.cwiseProduct(meridian_stream_direction_r).cwiseQuotient(tmp_mat_1);
     relative_speed_z=relative_speed_m.cwiseProduct(meridian_stream_direction_z).cwiseQuotient(tmp_mat_1);
+    rothalpy.col(0)=MatrixXd::Constant(stream_number,1,Cp*inlet_total_temperature)-circulation.col(0)*rotate_speed;
 }
 
 void stream_solver::calculate_s2m()
@@ -181,7 +188,7 @@ void stream_solver::interpolate_circulation()
 void stream_solver::calculate_theta()//page 252, equation 3-77d
 {
     MatrixXd tmp1=(dtheta_dm.leftCols(station_number-1)+dtheta_dm.rightCols(station_number-1))/2;
-    delta_theta=tmp1.cwiseProduct(meridian_stream_lenth);
+    delta_theta=tmp1.cwiseProduct(meridian_stream_length);
     for(int n1=1;n1<station_number;++n1)
     {
         theta.col(n1)=theta.col(n1-1)+delta_theta.col(n1-1);
@@ -274,12 +281,17 @@ double stream_solver::calculate_station_mass_flow(const double &wm_hub, const Ve
 //page 229, equation 3-41
 {
     //page 231, equation 3-43 to 3-45
-    //Runge-Kutta integral
     VectorXd spd=math_ext::runge_kutta(wm_hub,dif_1,delta_q.block(1,station,stream_number-1,1));
     const int n=dif_1.size();
-    VectorXd flow_ave, tmp_vec_1, tmp_vec_2;
-    tmp_vec_1=spd.cwiseProduct(density.col(station));
-    tmp_vec_2=(tmp_vec_1.head(n-1)+tmp_vec_1.tail(n-1))/2;
-    flow_ave=tmp_vec_2.cwiseProduct(meridian_area.col(station));
-    return(flow_ave.sum());
+}
+
+void stream_solver::calculate_efficiency_grid()
+{
+    VectorXd stream_length=meridian_stream_length.rowwise().sum(),
+            tmp_vec_1=MatrixXd::Ones(stream_number,1),
+            tmp_vec_2=MatrixXd::Constant(stream_number,1,wheel_efficiency);
+    for(int n1=0;n1<station_number-1;++n1)
+    {
+        efficiency_grid.col(n1)=(tmp_vec_1-tmp_vec_2).cwiseQuotient(stream_length).cwiseProduct(meridian_stream_length.col(n1));
+    }
 }
