@@ -2,6 +2,8 @@
 #define THERMALDYNAMIC_EQUATIONS_H
 #include <cmath>
 
+using namespace std;
+
 class thermaldynamic_equations
 {
 public:

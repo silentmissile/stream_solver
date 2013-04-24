@@ -106,9 +106,11 @@ void stream_solver::flow_field_initialization()
     theta.resizeLike(radius);
     theta.fill(M_PI/6);
     pressure.resizeLike(radius);
+    total_pressure.resizeLike(radius);
     temperature.resizeLike(radius);
     density.resizeLike(radius);
     enthalpy.resizeLike(radius);
+    total_enthalpy.resizeLike(radius);
     entropy.resizeLike(radius);
     relative_speed_r.resizeLike(radius);
     relative_speed_z.resizeLike(radius);
@@ -119,10 +121,12 @@ void stream_solver::flow_field_initialization()
                                               mass_flow_rate,gas_constant,heat_capacity_ratio,
                                               in_p,in_t,in_den);
     pressure.fill(in_p);
+    total_pressure.fill(inlet_total_pressure);
     temperature.fill(in_t);
     density.fill(in_den);
     enthalpy.fill(Cp*in_t);
-    entropy.fill(0);
+    total_enthalpy.fill(Cp*inlet_total_temperature);
+    entropy.col(0)=entropy_inlet;
     meridian_stream_direction_r.resizeLike(radius);
     meridian_stream_direction_z.resizeLike(radius);
     meridian_stream_curvature.resizeLike(radius);
@@ -157,6 +161,18 @@ void stream_solver::calculate_s2m()
     //page 252, equation 3-77
     MatrixXd dwm_dq=curvature_centrifugal_force.cwiseProduct(relative_speed_m)
             +pressure_grandiant_force+thermal_grandiant_force.cwiseQuotient(relative_speed_m);
+    calculate_efficiency_grid();
+    calculate_thermaldynamic();
+    for(int n1=1;n1<station_number;++n1)
+    {
+        double tmp_mf, residence, wm_hub=relative_speed_m(0,0);
+        do
+        {
+            tmp_mf=calculate_station_mass_flow(wm_hub,dwm_dq.col(n1),n1);
+            residence=(tmp_mf-mass_flow_rate)/mass_flow_rate;
+            wm_hub*=1+residence;
+        }while(std::fabs(residence)<0.001);
+    }
 }
 
 MatrixXd stream_solver::calculate_curvature_centrifugal()//coefficient A, page 252, equation 3-77a
@@ -277,21 +293,67 @@ MatrixXd stream_solver::calculate_thermal_gradiant()//coefficient C, page 252, e
     return(total_enthalpy_gradient+circulation_gradient+entropy_gradient);
 }
 
-double stream_solver::calculate_station_mass_flow(const double &wm_hub, const VectorXd &dif_1, const int &station)
+double stream_solver::calculate_station_mass_flow(const double &wm0, const VectorXd &dif_1, const int &station)
 //page 229, equation 3-41
 {
     //page 231, equation 3-43 to 3-45
-    VectorXd spd=math_ext::runge_kutta(wm_hub,dif_1,delta_q.block(1,station,stream_number-1,1));
+    VectorXd wm=math_ext::runge_kutta(wm0,dif_1,delta_q.block(1,station,stream_number-1,1)),
+            spd_square(wm.size()), tmp1, tmp2, tmp_p, tmp_t, tmp_rho;
     const int n=dif_1.size();
+    //by the assumed wm0, we can get all wm at the station
+    //by the wm at the station and circulation, we can get speed at the station
+    //we got total pressure and total temperature in calculate_thermaldynamic()
+    //we can get static pressure, temperature and density by total parameter and speed
+    //finally we can get mass flow by the wm and density
+    //in page 264, the 3rd block is this function, but it's not explained detailed in the literature
+    tmp1=circulation.col(station).cwiseQuotient(radius.col(station));
+    spd_square=wm.cwiseProduct(wm)+tmp1.cwiseProduct(tmp1);
+    tmp_t=total_temperature.col(station)-0.5*spd_square/Cp;
+    tmp_p=total_pressure.col(station).cwiseQuotient(
+                MatrixXd::Ones(n,1)+spd_square.cwiseQuotient(tmp_t)/(2*gas_constant));
+    tmp_rho=tmp_p.cwiseQuotient(tmp_t)/gas_constant;
+    tmp1=wm.cwiseProduct(tmp_rho);
+    tmp2=(tmp1.head(n-1)+tmp1.tail(n-1))/2;
+    return(tmp2.cwiseProduct(meridian_area.col(station)).sum());
 }
 
 void stream_solver::calculate_efficiency_grid()
 {
+    //Jiang Zikang, page 359, (6)
     VectorXd stream_length=meridian_stream_length.rowwise().sum(),
             tmp_vec_1=MatrixXd::Ones(stream_number,1),
             tmp_vec_2=MatrixXd::Constant(stream_number,1,wheel_efficiency);
     for(int n1=0;n1<station_number-1;++n1)
     {
-        efficiency_grid.col(n1)=(tmp_vec_1-tmp_vec_2).cwiseQuotient(stream_length).cwiseProduct(meridian_stream_length.col(n1));
+        efficiency_grid.col(n1)=MatrixXd::Ones(stream_number,1)
+                -(tmp_vec_1-tmp_vec_2).cwiseQuotient(stream_length).cwiseProduct(meridian_stream_length.col(n1));
     }
+}
+
+void stream_solver::calculate_thermaldynamic()
+{
+    //Jiang Zikang, page 358, equation 14-94
+    for(int n1=1;n1<station_number;++n1)
+    {
+        total_enthalpy.col(n1)=total_enthalpy.col(n1-1)+rotate_speed
+                *(circulation.col(n1)-circulation.col(n1-1));
+    }
+    //Jiang Zikang, page 358, equation 14-96
+    total_temperature=total_enthalpy/Cp;
+    ArrayXd tmp_arr_1(stream_number,1);
+    for(int n1=1;n1<station_number;++n1)
+    {
+        //Jiang Zikang, page 359, equation 14-98
+        tmp_arr_1=(ArrayXd::Ones(stream_number,1)+efficiency_grid.col(n1-1).cwiseProduct(
+                       total_temperature.col(n1).cwiseQuotient(total_temperature.col(n1-1))
+                       -MatrixXd::Ones(stream_number,1)
+                       ).array()
+                   ).pow(heat_capacity_ratio/(heat_capacity_ratio-1));
+        total_pressure.col(n1)=total_pressure.col(n1-1).cwiseProduct(tmp_arr_1.matrix());
+        //Jiang Zikang, page 359, equation 14-99
+        tmp_arr_1=total_temperature.col(n1).cwiseQuotient(total_temperature.col(n1-1)).array().log()*Cp
+                -total_pressure.col(n1).cwiseQuotient(total_pressure.col(n1-1)).array().log()*gas_constant;
+        entropy.col(n1)=entropy.col(n1-1)+tmp_arr_1.matrix();
+    }
+
 }

@@ -33,31 +33,33 @@ private:
     void calculate_theta();
     void calculate_dtheta_dm();
     void calculate_efficiency_grid();
+    void calculate_thermaldynamic();
     double calculate_station_mass_flow(const double &wm_hub, const VectorXd &dif_1, const int &station);
     int blade_number, stream_number, station_number;
     //in following geometry parameter matrixes
     //each row is for one stream line, from leading edge to trailing edge
     //in each column, the points is from hub to tip
     //thickness is angular thickness not dimensional thickness
-    MatrixXd radius_original, z_axial_original, circulation_original, thickness_original;
-    MatrixXd radius, z_axial, thickness, beta, theta;
-    MatrixXd meridian_stream_direction_z, meridian_stream_direction_r;
-    MatrixXd meridian_stream_curvature, meridian_stream_length;
-    MatrixXd meridian_area;
+    MatrixXd radius_original, z_axial_original, circulation_original, thickness_original,
+    radius, z_axial, thickness, beta, theta,
+    meridian_stream_direction_z, meridian_stream_direction_r,
+    meridian_stream_curvature, meridian_stream_length,
+    meridian_area;
     //boundary conditions
     double inlet_total_pressure, inlet_total_temperature, outlet_pressure, mass_flow_rate;
     MatrixXd circulation;
     double rotate_speed;
-    MatrixXd wheel_efficiency;
+    double wheel_efficiency;
     VectorXd total_enthalpy_inlet, circulation_inlet, entropy_inlet;
     //material property
     double gas_constant, heat_capacity_ratio, Cp;
     //flow parameter for grid
-    MatrixXd pressure, temperature, density, enthalpy, entropy, rothalpy, efficiency_grid;
-    MatrixXd relative_speed_r, relative_speed_z, relative_speed_m, relative_speed_theta;
-    MatrixXd delta_theta, q, delta_q, delta_circulation;
-    MatrixXd curvature_centrifugal_force, pressure_grandiant_force, thermal_grandiant_force;
-    MatrixXd dtheta_dm, dcirculation_dm, dwm_dm, dtheta_dq, dcirculation_dq;
+    MatrixXd pressure, total_pressure, temperature, total_temperature, density,
+    enthalpy, total_enthalpy, entropy, rothalpy, efficiency_grid,
+    relative_speed_r, relative_speed_z, relative_speed_m, relative_speed_theta,
+    delta_theta, q, delta_q, delta_circulation,
+    curvature_centrifugal_force, pressure_grandiant_force, thermal_grandiant_force,
+    dtheta_dm, dcirculation_dm, dwm_dm, dtheta_dq, dcirculation_dq;
 };
 
 #endif // STREAM_SOLVER_H
