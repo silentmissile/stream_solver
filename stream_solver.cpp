@@ -4,7 +4,7 @@ stream_solver::stream_solver(const MatrixXd &r, const MatrixXd &z, const MatrixX
                              const int &bn, const int &sn, const int &stn,
                              const double &in_p0, const double &in_t0, const double &out_p, const MatrixXd &cir,
                              const VectorXd &circulation_in, const VectorXd &entropy_in,
-                             const double &mf, const double &rs, const MatrixXd &eff,
+                             const double &mf, const double &rs, const double &eff,
                              const double &R, const double &gamma)
 {
     //check input data
@@ -15,8 +15,6 @@ stream_solver::stream_solver(const MatrixXd &r, const MatrixXd &z, const MatrixX
             ||tmp_i_2!=z.cols()
             ||tmp_i_1!=t.rows()
             ||tmp_i_2!=t.cols()
-            ||tmp_i_1!=eff.rows()
-            ||tmp_i_2!=eff.cols()
             ||tmp_i_1!=cir.rows()
             ||tmp_i_2!=cir.cols()
             ||tmp_i_1!=circulation_in.size()
@@ -125,6 +123,7 @@ void stream_solver::flow_field_initialization()
     temperature.fill(in_t);
     density.fill(in_den);
     enthalpy.fill(Cp*in_t);
+    mass_flow_rate_inlet=meridian_area.col(0)./meridian_area.col(0).sum()*mass_flow_rate;
     total_enthalpy.fill(Cp*inlet_total_temperature);
     entropy.col(0)=entropy_inlet;
     meridian_stream_direction_r.resizeLike(radius);
@@ -166,9 +165,10 @@ void stream_solver::calculate_s2m()
     for(int n1=1;n1<station_number;++n1)
     {
         double tmp_mf, residence, wm_hub=relative_speed_m(0,0);
+        VectorXd tmp_vec_1;
         do
         {
-            tmp_mf=calculate_station_mass_flow(wm_hub,dwm_dq.col(n1),n1);
+            tmp_mf=calculate_station_mass_flow(wm_hub,dwm_dq.col(n1),n1,tmp_vec_1);
             residence=(tmp_mf-mass_flow_rate)/mass_flow_rate;
             wm_hub*=1+residence;
         }while(std::fabs(residence)<0.001);
@@ -230,7 +230,7 @@ MatrixXd stream_solver::calculate_pressure_gradiant()//coefficient B, page 252, 
     {
         for(int n2=1;n2<station_number;++n2)
         {
-            tmp_vec_1(n2)=tmp_vec_1(n2-1)+meridian_stream_lenth(n1,n2-1);
+            tmp_vec_1(n2)=tmp_vec_1(n2-1)+meridian_stream_length(n1,n2-1);
         }
         spline s(tmp_vec_1,circulation.row(n1));
         tmp1=s.get_dif_1();
@@ -293,13 +293,12 @@ MatrixXd stream_solver::calculate_thermal_gradiant()//coefficient C, page 252, e
     return(total_enthalpy_gradient+circulation_gradient+entropy_gradient);
 }
 
-double stream_solver::calculate_station_mass_flow(const double &wm0, const VectorXd &dif_1, const int &station)
+double stream_solver::calculate_station_mass_flow(const double &wm0, const VectorXd &dif_1, const int &station, VectorXd &mf_distribution)
 //page 229, equation 3-41
 {
     //page 231, equation 3-43 to 3-45
-    VectorXd wm=math_ext::runge_kutta(wm0,dif_1,delta_q.block(1,station,stream_number-1,1)),
-            spd_square(wm.size()), tmp1, tmp2, tmp_p, tmp_t, tmp_rho;
-    const int n=dif_1.size();
+    relative_speed_m.col(station)=math_ext::runge_kutta(wm0,dif_1,delta_q.block(1,station,stream_number-1,1));
+    VectorXd spd_square, cos_a_substract_b, tmp1, tmp2;
     //by the assumed wm0, we can get all wm at the station
     //by the wm at the station and circulation, we can get speed at the station
     //we got total pressure and total temperature in calculate_thermaldynamic()
@@ -307,13 +306,22 @@ double stream_solver::calculate_station_mass_flow(const double &wm0, const Vecto
     //finally we can get mass flow by the wm and density
     //in page 264, the 3rd block is this function, but it's not explained detailed in the literature
     tmp1=circulation.col(station).cwiseQuotient(radius.col(station));
-    spd_square=wm.cwiseProduct(wm)+tmp1.cwiseProduct(tmp1);
-    tmp_t=total_temperature.col(station)-0.5*spd_square/Cp;
-    tmp_p=total_pressure.col(station).cwiseQuotient(
-                MatrixXd::Ones(n,1)+spd_square.cwiseQuotient(tmp_t)/(2*gas_constant));
-    tmp_rho=tmp_p.cwiseQuotient(tmp_t)/gas_constant;
-    tmp1=wm.cwiseProduct(tmp_rho);
-    tmp2=(tmp1.head(n-1)+tmp1.tail(n-1))/2;
+    spd_square=relative_speed_m.col(station).cwiseProduct(relative_speed_m.col(station))
+            +tmp1.cwiseProduct(tmp1);
+    temperature.col(station)=total_temperature.col(station)-0.5*spd_square/Cp;
+    pressure.col(station)=total_pressure.col(station).cwiseQuotient(
+                MatrixXd::Ones(stream_number,1)
+                +spd_square.cwiseQuotient(temperature.col(station))/(2*gas_constant));
+    density.col(station)=pressure.col(station).cwiseQuotient(temperature.col(station))/gas_constant;
+    tmp1.resize(stream_number);
+    tmp1.fill(z_axial(stream_number-1,station)-z_axial(0,station));
+    tmp2.resize(stream_number);
+    tmp2.fill(radius(stream_number-1,station)-radius(0,station));
+    cos_a_substract_b=math_ext::cos_subtract(meridian_stream_direction_z.col(station),
+                                             meridian_stream_direction_r.col(station),
+                                             tmp2,tmp1);
+    mf_distribution=relative_speed_m.col(station).cwiseProduct(density.col(station)).cwiseProduct(cos_a_substract_b);
+    tmp2=(mf_distribution.head(stream_number-1)+mf_distribution.tail(stream_number-1))/2;
     return(tmp2.cwiseProduct(meridian_area.col(station)).sum());
 }
 
@@ -356,4 +364,24 @@ void stream_solver::calculate_thermaldynamic()
         entropy.col(n1)=entropy.col(n1-1)+tmp_arr_1.matrix();
     }
 
+}
+
+void stream_solver::interpolate_mass_flow(const int &station, const VectorXd &mf_pre)
+{
+    VectorXd tmp_vec_1(stream_number), tmp_vec_2(stream_number), tmp_vec_3(stream_number), tmp_vec_4;
+    tmp_vec_1(0)=0;//area as x_in
+    tmp_vec_2(0)=0;//mass flow rate as y_in
+    tmp_vec_2.tail(stream_number-1)=
+            (mf_pre.head(stream_number-1)+mf_pre.tail(stream_number-1)
+             ).cwiseProduct(meridian_area.col(station))/2;
+    tmp_vec_3(0)=0;//inlet mass flow rate distribution as y_out
+    for(int n1=1;n1<stream_number;++n1)
+    {
+        tmp_vec_1(n1)=tmp_vec_1(n1-1)+meridian_area(n1-1,station);
+        tmp_vec_2(n1)=tmp_vec_2(n1-1)+tmp_vec_2(n1);
+        tmp_vec_3(n1)=tmp_vec_3(n1-1)+mass_flow_rate_inlet(n1-1);
+    }
+    tmp_vec_4=math_ext::interpolate_y(tmp_vec_1,tmp_vec_2,tmp_vec_3);
+    //now we get the area for new nodes at station
+    //then translate area to q
 }

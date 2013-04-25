@@ -19,7 +19,7 @@ public:
                            const int &bn, const int &sn, const int &stn,
                            const double &in_p, const double &in_t, const double &out_p, const MatrixXd &cir,
                            const VectorXd &circulation_in, const VectorXd &entropy_in,
-                           const double &mf, const double &rs, const MatrixXd &eff,
+                           const double &mf, const double &rs, const double &eff,
                            const double &R, const double &gamma);
 private:
     void flow_field_initialization();
@@ -34,7 +34,8 @@ private:
     void calculate_dtheta_dm();
     void calculate_efficiency_grid();
     void calculate_thermaldynamic();
-    double calculate_station_mass_flow(const double &wm_hub, const VectorXd &dif_1, const int &station);
+    void interpolate_mass_flow(const int &station, const VectorXd &mf_pre);
+    double calculate_station_mass_flow(const double &wm_hub, const VectorXd &dif_1, const int &station, VectorXd &mf_distribution);
     int blade_number, stream_number, station_number;
     //in following geometry parameter matrixes
     //each row is for one stream line, from leading edge to trailing edge
@@ -50,7 +51,7 @@ private:
     MatrixXd circulation;
     double rotate_speed;
     double wheel_efficiency;
-    VectorXd total_enthalpy_inlet, circulation_inlet, entropy_inlet;
+    VectorXd total_enthalpy_inlet, circulation_inlet, entropy_inlet, mass_flow_rate_inlet;
     //material property
     double gas_constant, heat_capacity_ratio, Cp;
     //flow parameter for grid
