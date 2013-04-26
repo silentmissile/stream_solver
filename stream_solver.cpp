@@ -130,6 +130,8 @@ void stream_solver::flow_field_initialization()
     meridian_stream_direction_z.resizeLike(radius);
     meridian_stream_curvature.resizeLike(radius);
     meridian_stream_length.resize(stream_number,station_number-1);
+    geometry_residence.resize(stream_number-2,station_number-1);
+    geometry_residence.fill(0);
     efficiency_grid.resizeLike(meridian_stream_length);
     meridian_area.resize(stream_number-1,station_number);
     dtheta_dm.resizeLike(radius);
@@ -151,29 +153,34 @@ void stream_solver::flow_field_initialization()
 
 void stream_solver::calculate_s2m()
 {
-    curvature_centrifugal_force=calculate_curvature_centrifugal();
-    interpolate_circulation();
-    calculate_dtheta_dm();
-    calculate_theta();
-    pressure_grandiant_force=calculate_pressure_gradiant();
-    thermal_grandiant_force=calculate_pressure_gradiant();
-    //page 252, equation 3-77
-    MatrixXd dwm_dq=curvature_centrifugal_force.cwiseProduct(relative_speed_m)
-            +pressure_grandiant_force+thermal_grandiant_force.cwiseQuotient(relative_speed_m);
-    calculate_efficiency_grid();
-    calculate_thermaldynamic();
-    for(int n1=1;n1<station_number;++n1)
+    do
     {
-        double tmp_mf, residence, wm_hub=relative_speed_m(0,0);
-        VectorXd tmp_vec_1;
-        do
+        calculate_stream_directions();
+        calculate_area();
+        curvature_centrifugal_force=calculate_curvature_centrifugal();
+        interpolate_circulation();
+        calculate_dtheta_dm();
+        calculate_theta();
+        pressure_grandiant_force=calculate_pressure_gradiant();
+        thermal_grandiant_force=calculate_thermal_gradiant();
+        //page 252, equation 3-77
+        MatrixXd dwm_dq=curvature_centrifugal_force.cwiseProduct(relative_speed_m)
+                +pressure_grandiant_force+thermal_grandiant_force.cwiseQuotient(relative_speed_m);
+        calculate_efficiency_grid();
+        calculate_thermaldynamic();
+        for(int n1=1;n1<station_number;++n1)
         {
-            tmp_mf=calculate_station_mass_flow(wm_hub,dwm_dq.col(n1),n1,tmp_vec_1);
-            residence=(tmp_mf-mass_flow_rate)/mass_flow_rate;
-            wm_hub*=1+residence;
-        }while(std::fabs(residence)<0.001);
-        interpolate_mass_flow(n1,tmp_vec_1);
-    }
+            double tmp_mf, residence, wm_hub=relative_speed_m(0,0);
+            VectorXd tmp_vec_1;
+            do
+            {
+                tmp_mf=calculate_station_mass_flow(wm_hub,dwm_dq.col(n1),n1,tmp_vec_1);
+                residence=(tmp_mf-mass_flow_rate)/mass_flow_rate;
+                wm_hub*=1+residence;
+            }while(std::fabs(residence)<0.001);
+            interpolate_mass_flow(n1,tmp_vec_1);
+        }
+    }while((geometry_residence.sum())>0.1);
 }
 
 MatrixXd stream_solver::calculate_curvature_centrifugal()//coefficient A, page 252, equation 3-77a
@@ -428,6 +435,7 @@ void stream_solver::interpolate_mass_flow(const int &station, const VectorXd &mf
                 z_axial(n1,station)=tmp_vec_2(n1)*sin_beta+z_axial(0,station);
                 //written in my self note y3
                 thickness(n1,station)=(2*M_PI*radius(n1,station)-y1+k*(tmp_vec_2(n1)-x1))/blade_number;
+                geometry_residence(n1-1,station-1)=(tmp_vec_2(n1)-tmp_vec_0(n1))/tmp_vec_0(n1);
                 break;
             }
             else

@@ -45,7 +45,7 @@ private:
     radius, z_axial, thickness, beta, theta,
     meridian_stream_direction_z, meridian_stream_direction_r,
     meridian_stream_curvature, meridian_stream_length,
-    meridian_area;
+    meridian_area, geometry_residence;
     //boundary conditions
     double inlet_total_pressure, inlet_total_temperature, outlet_pressure, mass_flow_rate;
     MatrixXd circulation;
