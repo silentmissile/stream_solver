@@ -123,7 +123,7 @@ void stream_solver::flow_field_initialization()
     temperature.fill(in_t);
     density.fill(in_den);
     enthalpy.fill(Cp*in_t);
-    mass_flow_rate_inlet=meridian_area.col(0)./meridian_area.col(0).sum()*mass_flow_rate;
+    mass_flow_rate_inlet=meridian_area.col(0)/meridian_area.col(0).sum()*mass_flow_rate;
     total_enthalpy.fill(Cp*inlet_total_temperature);
     entropy.col(0)=entropy_inlet;
     meridian_stream_direction_r.resizeLike(radius);
@@ -172,6 +172,7 @@ void stream_solver::calculate_s2m()
             residence=(tmp_mf-mass_flow_rate)/mass_flow_rate;
             wm_hub*=1+residence;
         }while(std::fabs(residence)<0.001);
+        interpolate_mass_flow(n1,tmp_vec_1);
     }
 }
 
@@ -363,12 +364,15 @@ void stream_solver::calculate_thermaldynamic()
                 -total_pressure.col(n1).cwiseQuotient(total_pressure.col(n1-1)).array().log()*gas_constant;
         entropy.col(n1)=entropy.col(n1-1)+tmp_arr_1.matrix();
     }
-
 }
 
 void stream_solver::interpolate_mass_flow(const int &station, const VectorXd &mf_pre)
+//in mf_pre, each number is the product of speed, cos(angle) and density
+//this product indicates the mass flow rate more accurate than speed only
 {
-    VectorXd tmp_vec_1(stream_number), tmp_vec_2(stream_number), tmp_vec_3(stream_number), tmp_vec_4;
+    VectorXd tmp_vec_0(stream_number), tmp_vec_1(stream_number), tmp_vec_2(stream_number),
+            tmp_vec_3(stream_number), tmp_vec_4;
+    tmp_vec_0(0)=0;//q length for following calculation
     tmp_vec_1(0)=0;//area as x_in
     tmp_vec_2(0)=0;//mass flow rate as y_in
     tmp_vec_2.tail(stream_number-1)=
@@ -377,11 +381,57 @@ void stream_solver::interpolate_mass_flow(const int &station, const VectorXd &mf
     tmp_vec_3(0)=0;//inlet mass flow rate distribution as y_out
     for(int n1=1;n1<stream_number;++n1)
     {
+        tmp_vec_0(n1)=tmp_vec_0(n1-1)+delta_q(n1,station);
         tmp_vec_1(n1)=tmp_vec_1(n1-1)+meridian_area(n1-1,station);
         tmp_vec_2(n1)=tmp_vec_2(n1-1)+tmp_vec_2(n1);
         tmp_vec_3(n1)=tmp_vec_3(n1-1)+mass_flow_rate_inlet(n1-1);
     }
-    tmp_vec_4=math_ext::interpolate_y(tmp_vec_1,tmp_vec_2,tmp_vec_3);
     //now we get the area for new nodes at station
-    //then translate area to q
+    tmp_vec_4=math_ext::interpolate_y(tmp_vec_1,tmp_vec_2,tmp_vec_3);
+    //then translate area to r, z, delta_q and thickness
+    VectorXd arc_length=radius.col(station).cwiseProduct(MatrixXd::Constant(stream_number,1,2*M_PI)-blade_number*thickness.col(station));
+    double length_q,
+            cos_beta=radius(stream_number-1,station)-radius(0,station),
+            sin_beta=z_axial(stream_number-1,station)-z_axial(0,station);
+    length_q=std::sqrt(cos_beta*cos_beta+sin_beta*sin_beta);
+    cos_beta/=length_q;
+    sin_beta/=length_q;
+    //only area-x_in-tmp_vec_1 and area-x_out-tmp_vec_4 are needed
+    //tmp_vec_2 and tmp_vec_3 are free now
+    //we use tmp_vec_2 to record q, and use tmp_vec_3 to record thickness
+    for(int n1=0;n1<stream_number-1;++n1)
+    {
+        if(tmp_vec_4(n1)<=tmp_vec_1(0))
+        {
+            tmp_vec_2(n1)=tmp_vec_1(0);
+            continue;
+        }
+        else if(tmp_vec_4(n1)>=tmp_vec_1(stream_number-1))
+        {
+            tmp_vec_2(n1)=tmp_vec_1(stream_number-1);
+            continue;
+        }
+        for(int n2=1;n2<stream_number-1;++n2)
+        {
+            if(tmp_vec_4(n1)>tmp_vec_1(n2-1) && tmp_vec_4(n1)<=tmp_vec_1(n2))
+            {
+                //written in my self note x3
+                double y1=arc_length(n2-1),y2=arc_length(n2),
+                        x1=tmp_vec_0(n2-1),x2=tmp_vec_0(n2),
+                        delta_area=tmp_vec_4(n1)-tmp_vec_1(n2-1),
+                        k=(y2-y1)/(x2-x1);
+                tmp_vec_2(n1)=x1+(-y1+std::sqrt(y1*y1+2*delta_area*k))/k;
+                //now we get q
+                //and we need to tranform q to r, z, delta_q and thickness
+                delta_q(n1,station)=tmp_vec_2(n1)-tmp_vec_2(n1-1);
+                radius(n1,station)=tmp_vec_2(n1)*cos_beta+radius(0,station);
+                z_axial(n1,station)=tmp_vec_2(n1)*sin_beta+z_axial(0,station);
+                //written in my self note y3
+                thickness(n1,station)=(2*M_PI*radius(n1,station)-y1+k*(tmp_vec_2(n1)-x1))/blade_number;
+                break;
+            }
+            else
+                continue;
+        }
+    }
 }

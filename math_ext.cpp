@@ -70,24 +70,29 @@ VectorXd math_ext::runge_kutta(const double &x0, const VectorXd &dif_1, const Ve
 
 VectorXd math_ext::interpolate_y(const VectorXd &x_in, const VectorXd &y_in, const VectorXd &y_out)
 {
-    VectorXd x_out(y_out.size());
     const int n=x_in.size(), m=y_out.size();
+    VectorXd x_out(m);
     for(int n1=0;n1<m;++n1)
     {
-        if(y_out(n1)<y_in(0))
+        if(y_out(n1)<=y_in(0))
         {
-            x_out(n1)=x_in(0)+(y_out(n1)-y_in(0))*(x_in(1)-x_in(0))/(y_in(1)-y_in(0));
+            //x_out(n1)=x_in(0)+(y_out(n1)-y_in(0))*(x_in(1)-x_in(0))/(y_in(1)-y_in(0));
+            x_out(n1)=x_in(0);
             continue;
         }
-        else if(y_out(n1)>y_in(n-1))
+        else if(y_out(n1)>=y_in(n-1))
         {
-            x_out(n1)=x_in(n-1)+(y_out(n1)-y_in(n-1))*(x_in(n-2)-x_in(n-1))/(y_in(n-2)-y_in(n-1));
+            //x_out(n1)=x_in(n-1)+(y_out(n1)-y_in(n-1))*(x_in(n-2)-x_in(n-1))/(y_in(n-2)-y_in(n-1));
+            x_out(n1)=x_in(n-1);
             continue;
         }
         for(int n2=1;n2<n;++n2)
         {
-            if(y_out(n1)>=y_in(n2-1) && y_out(n1)<y_in(n2))
+            if(y_out(n1)>y_in(n2-1) && y_out(n1)<=y_in(n2))
+            {
                 x_out(n1)=x_in(n2-1)+(x_in(n2)-x_in(n2-1))*(y_out(n1)-y_in(n2-1))/(y_in(n2)-y_in(n2-1));
+                break;
+            }
             else
                 continue;
         }
