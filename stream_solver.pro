@@ -4,7 +4,7 @@
 #
 #-------------------------------------------------
 
-INCLUDEPATH += E:/Backup/Develop/eigen-3.1.3
+INCLUDEPATH += I:/Source/LAPACK/eigen-eigen-3.2.0
 QT       -= gui
 
 TARGET = stream_solver
